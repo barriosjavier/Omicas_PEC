@@ -11,15 +11,24 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r load_data}
-
+library(readxl)
+path<-"ST000291noNAs.XLSX"
+sheetnames <- excel_sheets(path)
+mylist <- lapply(excel_sheets(path), read_excel, path = path)
+names(mylist) <- sheetnames
+list2env(mylist ,.GlobalEnv)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r create_class, echo=FALSE}
+if (!require(BiocManager)){
+  install("BiocManager")
+}
+
+data<-features[,-1]
+colnames<-names(data)
+
+#colnames<-data
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
