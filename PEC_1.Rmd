@@ -26,9 +26,20 @@ if (!require(BiocManager)){
   install("BiocManager")
 }
 
-data<-features[,-1]
-colnames<-names(data)
+char_cols_feat <- unlist(lapply(features, is.character))
+numfeatures<-as.data.frame(sapply(features[,char_cols_feat],as.numeric))
+numfeatures<-numfeatures[order(numfeatures$PubChemID),]
 
-#colnames<-data
+rownames<-names(data)
+colnames<-numfeatures$PubChemID
+
+data<-numfeatures[,-1]
+
+data2<-as.data.frame(t(data))
+
+#rownames(features2)<-features2[,1]
+char_cols <- unlist(lapply(data, is.character))
+numdata<-as.data.frame(sapply(data[,char_cols],as.numeric))
+
 ```
 
