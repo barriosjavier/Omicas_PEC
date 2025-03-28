@@ -21,7 +21,7 @@ list2env(mylist ,.GlobalEnv)
 
 
 
-```{r create_class, echo=FALSE}
+```{r curate_data, echo=FALSE}
 if (!require(BiocManager)){
   install("BiocManager")
 }
@@ -30,16 +30,37 @@ char_cols_feat <- unlist(lapply(features, is.character))
 numfeatures<-as.data.frame(sapply(features[,char_cols_feat],as.numeric))
 numfeatures<-numfeatures[order(numfeatures$PubChemID),]
 
-rownames<-names(data)
-colnames<-numfeatures$PubChemID
 
-data<-numfeatures[,-1]
+namesofcolumns<-names(numfeatures)
+namesofrows<-as.character(numfeatures$PubChemID)
+numfeatures_no_NA<-numfeatures[-which(is.na(numfeatures$PubChemID)),]
+row.names(numfeatures_no_NA)<-as.character(numfeatures_no_NA$PubChemID)
+namesofrows<-as.character(numfeatures_no_NA$PubChemID)
+numfeatures_no_NA<-numfeatures_no_NA[,-1]
+traspose<-as.data.frame(t(numfeatures_no_NA))
+matr_data<-as.matrix(traspose)
+rownames(matr_data)<-NULL
+colnames(matr_data)<-NULL
 
-data2<-as.data.frame(t(data))
 
-#rownames(features2)<-features2[,1]
-char_cols <- unlist(lapply(data, is.character))
-numdata<-as.data.frame(sapply(data[,char_cols],as.numeric))
+```
 
+
+```{r class}
+BiocManager::install("SummarizedExperiment")
+library(SummarizedExperiment)
+
+mets<-metaboliteNames[-is.na(as.numeric(metaboliteNames$PubChemID)),]
+
+myobj<-SummarizedExperiment(assays=list(data=matr_data),colData = mets,rowData = metadata)
+
+```
+
+```{r analysis,echo=TRUE}
+##MIRAR ESTOOOOOOOO
+opt <- par(mfrow=c(3,3))
+for (i in 1:nrow(assays(myobj)$data))
+  hist(assays(myobj)$data[,i], main = rowData(myobj)$sampleID[i])
+par(opt)
 ```
 
