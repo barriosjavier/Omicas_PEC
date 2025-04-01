@@ -9,58 +9,118 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-
-```{r load_data}
+```{r }
 library(readxl)
-path<-"ST000291noNAs.XLSX"
+path<-"TIO2+PTYR-human-MSS+MSIvsPD.XLSX"
 sheetnames <- excel_sheets(path)
 mylist <- lapply(excel_sheets(path), read_excel, path = path)
 names(mylist) <- sheetnames
 list2env(mylist ,.GlobalEnv)
 ```
 
-
-
-```{r curate_data, echo=FALSE}
-if (!require(BiocManager)){
-  install("BiocManager")
+```{r}
+if (!require(readtext)){
+  install.packages("readtext")
 }
-
-char_cols_feat <- unlist(lapply(features, is.character))
-numfeatures<-as.data.frame(sapply(features[,char_cols_feat],as.numeric))
-numfeatures<-numfeatures[order(numfeatures$PubChemID),]
-
-
-namesofcolumns<-names(numfeatures)
-namesofrows<-as.character(numfeatures$PubChemID)
-numfeatures_no_NA<-numfeatures[-which(is.na(numfeatures$PubChemID)),]
-row.names(numfeatures_no_NA)<-as.character(numfeatures_no_NA$PubChemID)
-namesofrows<-as.character(numfeatures_no_NA$PubChemID)
-numfeatures_no_NA<-numfeatures_no_NA[,-1]
-traspose<-as.data.frame(t(numfeatures_no_NA))
-matr_data<-as.matrix(traspose)
-rownames(matr_data)<-NULL
-colnames(matr_data)<-NULL
-
-
-```
-
-
-```{r class}
+library("readtext")
+descr<-readtext("description.md")
 BiocManager::install("SummarizedExperiment")
-library(SummarizedExperiment)
+BiocManager::install("POMA")
 
-mets<-metaboliteNames[-is.na(as.numeric(metaboliteNames$PubChemID)),]
+library("SummarizedExperiment")
 
-myobj<-SummarizedExperiment(assays=list(data=matr_data),colData = mets,rowData = metadata)
+#estas dos igual van en rowdata o coldata
+originalData$num_CLASS<-as.numeric(as.factor(originalData$CLASS))
+originalData$num_PHOSPHO<-as.numeric(as.factor(originalData$PHOSPHO))
+
+matr<-originalData[,unlist(lapply(originalData, is.numeric))]
+
+#no se bien que hacer con el score pero creo que me lo voy a fumar
+coldata<-targets
+
+#matr<-matr[,-c(1,14,15)]
+matr<-t(matr)
+rowdata<-data.frame(targets[,-1])
+rownames(rowdata,targets$Sample...1)
+##INTENTAR ENTENDER LO DEL ROWDATAAAAAA
+myobj<-SummarizedExperiment(assays=list(data=matr),metadata=descr$text,colData=mylist$originalData$SequenceModifications)
+save(myobj,file="obj.rda")
+
+analyzable<-t(assays(myobj)$data[-c(1,14,15),])
+
+round(apply(analyzable,2, summary))
+```
+
+```{r}
+#Aplico logaritmos porque hay valores extremadamente altos
+opt <- par(mfrow=c(3,3))
+for (i in 1:ncol(analyzable))
+  hist(log(analyzable[,i]), main = targets$Sample...1[i],xlab=targets$Sample...1[i])
+par(opt)
+```
+
+```{r}
+groupColors <- c(rep(c("red","green"), 6))
+boxplot(log(analyzable), col=groupColors, main="log Expression values for\n 12 samples, two groups",
+    xlab="Slides",
+    ylab="logExpression", las=2, cex.axis=0.7, cex.main=0.7)
+```
+
+```{r}
+row_sub = apply(analyzable, 1, function(row) sum(row==0)<12)
+analyzable<-analyzable[row_sub,]
+pca<-prcomp(t(analyzable), scale=TRUE) # Ya se han escalado los datos
+loads<- round(pca$sdev^2/sum(pca$sdev^2)*100,1)
+xlab<-c(paste("PC1",loads[1],"%"))
+ylab<-c(paste("PC2",loads[2],"%"))
+plot(pca$x[,1:2],xlab=xlab,ylab=ylab, col=groupColors, 
+     main ="Principal components (PCA)")
+names2plot<-targets$Sample...1
+
+text(pca$x[,1],pca$x[,2],names2plot, pos=3, cex=.6)
+
+install.packages("factoextra")
+library(factoextra)
+
+fviz_eig(pca, addlabels = TRUE, ylim = c(0, 100))
+
 
 ```
 
-```{r analysis,echo=TRUE}
-##MIRAR ESTOOOOOOOO
-opt <- par(mfrow=c(3,3))
-for (i in 1:nrow(assays(myobj)$data))
-  hist(assays(myobj)$data[,i], main = rowData(myobj)$sampleID[i])
-par(opt)
+```{r}
+colnames(analyzable) <- names2plot
+clust.euclid.average <- hclust(dist(t(analyzable)),method="average")
+plot(clust.euclid.average, hang=-1)
+```
+
+
+```{r}
+library("POMA")
+normalized <- PomaNorm(myobj, method = "log_pareto")
+
+opt <- par(mfrow=c(1,2))
+PomaBoxplots(myobj, group = "samples", 
+             jitter = FALSE,
+             legend_position = "none") +
+  ggplot2::ggtitle("Not Normalized") # data before normalization
+
+PomaBoxplots(normalized, group = "samples", 
+             jitter = FALSE,
+             legend_position = "none") +
+  ggplot2::ggtitle("Normalized") # data after normalization
+```
+
+```{r}
+pre_processed <- PomaOutliers(normalized, do = "clean")
+
+
+poma_pca <- PomaMultivariate(pre_processed, method = "pca")
+
+heatmap(matr)
+```
+
+```{r analyisis}
+
+
 ```
 
