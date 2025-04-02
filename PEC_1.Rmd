@@ -84,33 +84,84 @@ pre_processed <- PomaOutliers(normalized, do = "clean")
 
 ```
 
-Una vez pre-procesados los datos
+Una vez pre-procesados los datos vamos a ver los análisis estadísticos. En primer lugar veremos los p-values de cada variable, y veremos su nivel de significación. También realizaremos un PCA como técnica de análisis multivariante para ver si se puede ver algún agrupamiento y se pueden clasificar más fácilmente los dos grupos.
+
+
+## Resultados
+
+Lo primero que queremos ver es si las variables están correlacionadas entre sí. Para ello vamos a ver las los valores de correlación. Si no hubiésemos normalizado los datos, usaríamos la matriz de covarianzas.
+Al ver la matriz de correlacione, podemos ver que muchas variables están correlacionadas entre sí a unos valores altos, por tanto, lo que se va a hacer es reducir la dimensionalidad para ver si podemos explicar mejor estos datos.
 ```{r analysis}
 
 poma_corr<-PomaCorr(pre_processed)
-poma_corr$correlations
 poma_corr$corrplot
 ```
+Con el volcano plot podemos ver si hay diferencias significativas entre los grupos de control y test, así como ver si hay diferencias significativas. Hice 2 pruebas, tanto con la función PomaVolcano, como con EnhancedVolcano, para ver si se podían ver cuáles son los diferentes, pero los labels parecen ser demasiado largos.
 
-```{r}
-PomaUnivariate(pre_processed, method = "ttest")
-pomvolcano<-PomaVolcano(myobj, pval = "adjusted",labels=TRUE)
+```{r volcanoenh, echo=FALSE}
 
+#Esto funciona pero me sigue sin sacar labels
 BiocManager::install('EnhancedVolcano')
 library(EnhancedVolcano)
 filevolcano<-file[,-c(1,2)]
-EnhancedVolcano(filevolcano,x ='log2FoldChange',y ='pvalue')
+test<-labels$cachexic[,-c(1,2)]
+control<-labels$control[-c(1,2)]
+log2test<-log2(test)
+log2control<-log2(control)
+control_mean = apply(log2control, 2, mean)
+test_mean = apply(log2test, 2, mean)
+
+foldchange<-control_mean-test_mean
+index_control<-which(file$Muscle.loss=="control")
+index_cach<-which(file$Muscle.loss=="cachexic")
+
+rawttest <- function(df, grp1, grp2) {
+  x = df[grp1]
+  y = df[grp2]
+  x = as.numeric(x)
+  y = as.numeric(y)  
+  results = t.test(x, y)
+  results$p.value
+}
+rawpvalue<-apply(filevolcano,2,rawttest,index_control,index_cach)#
+
+results = cbind(foldchange, rawpvalue)
+results = as.data.frame(results)
+results$probename <- colnames(filevolcano)
+
+EnhancedVolcano(results[,c(1,2)],x ='foldchange',y ='rawpvalue',lab=results$probename,max.overlaps = 0,labSize = 0.2,ylim=c(0,5))
+
 ```
 
-```{r}
+
+```{r pomavolcano, echo=FALSE}
+PomaVolcano(myobj, pval = "adjusted",labels=TRUE)
+
+```
+
+En vista de que esto no nos aclara gran cosa, salvo que sí que hay variación y significación entre los grupos. Así pues, con el PCA se va a intentar ver si se pueden agrupar de una manera sencilla.
+En el resultado del PCA se puede ver por las elipses dibujadas que se puede diferenciar entre los grupos, sin embargo, están bastante entremezclados. Cabe destacar que la primera componente principal nos presenta una variación del 56%, tal y como se muestra con el scree plot, pero que la segunda ya se ve reducida al 4%, con lo que se podría decir que con la primera componente principal se describe bien la variabilidad de nuestro conjunto de datos.
+
+```{r pca, echo=FALSE, warning=FALSE}
 poma_pca <- PomaMultivariate(pre_processed, method = "pca")
 poma_pca$scoresplot +
   ggplot2::ggtitle("Scores Plot")
 ```
 
-```{r}
+```{r screepl, echo=FALSE}
 poma_pca$screeplot +
   ggplot2::ggtitle("Scree Plot")
 
 ```
 
+```{r}
+poma_pca$biplot+
+  ggplot2::ggtitle("Biplot")
+```
+
+## Discusión y Conclusiones
+Este dataset de 77 muestras de 63 variables tiene dos grupos diferenciados, que son test(afectados por caquexia) y control. A pesar de tener más muestras de uno que de otro se puede considerar pareado, por lo que, a falta de más datos debido a la anonimización de los pacientes, se puede considerar un estudio bien planteado si la variabilidad entre pacientes es la correcta. Del fichero se puede ver que hay metabolitos que tienen diferencias significativas si están en test o en control, y que se pueden llegar a agrupar las muestras de forma apropiada al aplicar PCA.
+
+## Referencias
+Enlace al repositorio de github
+https://github.com/barriosjavier/Omicas_PEC.git
