@@ -1,8 +1,9 @@
 ---
-title: "PEC_1"
+title: "Análisis de datos Ómicos PEC_1"
 output: html_document
-date: "2025-03-25"
+author: Javier Barrios
 ---
+
 ## Abstract
 Un aspecto muy importante a la hora de manejar datos ómicos es saber a qué datos nos estamos enfrentando y tener una visión general acerca de los mismos. Por eso, en este trabajo se va a realizar un análisis generalista de un conjunto de datos. Para ello se va a cargar un fichero con datos de metabolómica de un repositorio de github proporcionado por los profesores y se va realizar un breve análisis y preprocesado de los datos. Para ello se va a usar el lenguaje R y se van a proporcionar los resultados en un fichero Rmdarkdown(Rmd) subiéndolos a un repositorio en github. 
 
@@ -36,7 +37,12 @@ library("readtext")
 descr<-readtext("description.md")
 BiocManager::install("SummarizedExperiment")
 BiocManager::install("POMA")
+BiocManager::install('EnhancedVolcano')
+library(EnhancedVolcano)
 library("SummarizedExperiment")
+library("POMA")
+library(ggraph)
+
 ```
 Lo primero que se realiza es una observación de los datos para ver si todo es correcto. Lo primero es ver que no hay ningún elemento que sea NA, ya que es una cosa que puede ocurrir en estos casos; sin embargo, no se vio ninguno, ya que al parecer este dataset ya se había limpiado de este tipo de valores previamente.
 
@@ -45,7 +51,7 @@ A partir de aquí queremos hacer una exploración de los datos. Para ello se va 
 Para ello se carga el fichero, se cogen solamente las columnas numéricas y se trasponen para conseguir el formato requerido por los assays de dicha clase, donde se tienen en filas los metabolitos y en las columnas los pacientes. Las columnas PatientID y MuscleLoss, se pasan a la clase como datos de las columnas(colData).
 Con eso ya se pueden usar las funciones del paquete POMA.
 
-```{r}
+```{r separar, include=FALSE}
 labels<-split(file,file$Muscle.loss)
 
 matr<-file[,unlist(lapply(file, is.numeric))]
@@ -53,13 +59,14 @@ matr<-file[,unlist(lapply(file, is.numeric))]
 matr<-t(matr)
 coldata<-data.frame(file$Muscle.loss,row.names = file$Patient.ID)
 myobj<-SummarizedExperiment(assays=list(data=matr),metadata=descr$text,colData=coldata)
+save(myobj,file="obj_summarizedexp.rda")
 
 ```
 
 Una vez visto que se tiene todo ordenado de la forma apropiada, se normalizan las variables para eliminar posibles bias.
-En las siguientes figuras se pueden ver los datos antes y después de la normalización
-```{r}
-library("POMA")
+En las siguientes figuras se pueden ver los datos antes y después de la normalización.
+
+```{r norm, echo=FALSE}
 normalized <- PomaNorm(myobj, method = "log_pareto")
 
 opt <- par(mfrow=c(1,2))
@@ -91,18 +98,19 @@ Una vez pre-procesados los datos vamos a ver los análisis estadísticos. En pri
 
 Lo primero que queremos ver es si las variables están correlacionadas entre sí. Para ello vamos a ver las los valores de correlación. Si no hubiésemos normalizado los datos, usaríamos la matriz de covarianzas.
 Al ver la matriz de correlacione, podemos ver que muchas variables están correlacionadas entre sí a unos valores altos, por tanto, lo que se va a hacer es reducir la dimensionalidad para ver si podemos explicar mejor estos datos.
-```{r analysis}
+
+```{r analysis, echo=FALSE}
 
 poma_corr<-PomaCorr(pre_processed)
 poma_corr$corrplot
 ```
+
 Con el volcano plot podemos ver si hay diferencias significativas entre los grupos de control y test, así como ver si hay diferencias significativas. Hice 2 pruebas, tanto con la función PomaVolcano, como con EnhancedVolcano, para ver si se podían ver cuáles son los diferentes, pero los labels parecen ser demasiado largos.
 
 ```{r volcanoenh, echo=FALSE}
 
 #Esto funciona pero me sigue sin sacar labels
-BiocManager::install('EnhancedVolcano')
-library(EnhancedVolcano)
+
 filevolcano<-file[,-c(1,2)]
 test<-labels$cachexic[,-c(1,2)]
 control<-labels$control[-c(1,2)]
@@ -134,7 +142,7 @@ EnhancedVolcano(results[,c(1,2)],x ='foldchange',y ='rawpvalue',lab=results$prob
 ```
 
 
-```{r pomavolcano, echo=FALSE}
+```{r pomavolcano, echo=FALSE, warning=FALSE}
 PomaVolcano(myobj, pval = "adjusted",labels=TRUE)
 
 ```
@@ -154,7 +162,7 @@ poma_pca$screeplot +
 
 ```
 
-```{r}
+```{r biplot, echo=FALSE}
 poma_pca$biplot+
   ggplot2::ggtitle("Biplot")
 ```
