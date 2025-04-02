@@ -3,97 +3,61 @@ title: "PEC_1"
 output: html_document
 date: "2025-03-25"
 ---
+## Abstract
+Un aspecto muy importante a la hora de manejar datos ómicos es saber a qué datos nos estamos enfrentando y tener una visión general acerca de los mismos. Por eso, en este trabajo se va a realizar un análisis generalista de un conjunto de datos. Para ello se va a cargar un fichero con datos de metabolómica de un repositorio de github proporcionado por los profesores y se va realizar un breve análisis y preprocesado de los datos. Para ello se va a usar el lenguaje R y se van a proporcionar los resultados en un fichero Rmdarkdown(Rmd) subiéndolos a un repositorio en github. 
+
+
+## Objetivos
+
+
+Los objetivos de este trabajo son varios.
+* En primer lugar, familiarizarse con un dataset de metabolómica. Observar cómo pueden ser, qué tipo de datos se pueden observar, cómo se puede dar la descripción del estudio,etc.
+* El segundo objetivo es familiarizarse con el entorno de programación del lenguaje R, y es que, para analizar el conjunto de datos, se va a usar este lenguaje de programación, que es ampliamente usado en bioinformática.
+* En tercer lugar, dentro del lenguaje de programación R, está el objetivo de familiarizarse más concretamente con el paquete Bioconductor. Este paquete es muy potente si hablamos del campo de la bioinformática y aprender a manejarse con él es un paso importante.
+* El cuarto objetivo es ver el proceso de análisis de un conjunto de datos. Cómo se comienza con unos datos en bruto y prepararlos para poder analizarlos, así como el propio proceso de análisis de los mismos datos.
+
+
+## Métodos
+
+En este estudio se ha utilizado el conjunto de datos human_cachexia. La caquexia es un trastorno metabólico que deja a la persona en un estado de desnutrición, fatiga y debilidad generalizada. Además, implica pérdida de masa muscular y de peso.
+
+En primer lugar se han cargado los datos. Tras cargarlos se ha visto que este dataset contiene 77 filas y 65 columnas. Las filas son las muestras, es decir, los distintos pacientes a los que se les ha realizado el estudio metabólico. De las 65 columnas que se tienen, la primera es el ID o identificador del paciente, la segunda es si es un paciente de control o es un paciente afectado por el trastorno metabólico y las otras 63 son distintos datos metabólicos que se han obtenido en el estudio.
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-```{r }
+```{r read_fich_and_libraries,include=FALSE}
 library(readxl)
-path<-"TIO2+PTYR-human-MSS+MSIvsPD.XLSX"
-sheetnames <- excel_sheets(path)
-mylist <- lapply(excel_sheets(path), read_excel, path = path)
-names(mylist) <- sheetnames
-list2env(mylist ,.GlobalEnv)
-```
-
-```{r}
-if (!require(readtext)){
-  install.packages("readtext")
-}
+path<-"human_cachexia.csv"
+file<-read.csv(path)
 library("readtext")
 descr<-readtext("description.md")
 BiocManager::install("SummarizedExperiment")
 BiocManager::install("POMA")
-
 library("SummarizedExperiment")
+```
+Lo primero que se realiza es una observación de los datos para ver si todo es correcto. Lo primero es ver que no hay ningún elemento que sea NA, ya que es una cosa que puede ocurrir en estos casos; sin embargo, no se vio ninguno, ya que al parecer este dataset ya se había limpiado de este tipo de valores previamente.
 
-#estas dos igual van en rowdata o coldata
-originalData$num_CLASS<-as.numeric(as.factor(originalData$CLASS))
-originalData$num_PHOSPHO<-as.numeric(as.factor(originalData$PHOSPHO))
+A partir de aquí queremos hacer una exploración de los datos. Para ello se va a hacer uso del paquete POMA dentro del paquete de Bioconductor. Este paquete nos proporciona herramientas para el preprocesado de nuestro conjunto de datos. Una particularidad de las funciones de este paquete es que funcionan con objetos de la clase *SummarizedExperiment*, con lo que una de las primeras cosas que se deben hacer es crear un objeto de esa misma clase.
 
-matr<-originalData[,unlist(lapply(originalData, is.numeric))]
+Para ello se carga el fichero, se cogen solamente las columnas numéricas y se trasponen para conseguir el formato requerido por los assays de dicha clase, donde se tienen en filas los metabolitos y en las columnas los pacientes. Las columnas PatientID y MuscleLoss, se pasan a la clase como datos de las columnas(colData).
+Con eso ya se pueden usar las funciones del paquete POMA.
 
-#no se bien que hacer con el score pero creo que me lo voy a fumar
-coldata<-targets
+```{r}
+labels<-split(file,file$Muscle.loss)
 
-#matr<-matr[,-c(1,14,15)]
+matr<-file[,unlist(lapply(file, is.numeric))]
+
 matr<-t(matr)
-rowdata<-data.frame(targets[,-1])
-rownames(rowdata,targets$Sample...1)
-##INTENTAR ENTENDER LO DEL ROWDATAAAAAA
-myobj<-SummarizedExperiment(assays=list(data=matr),metadata=descr$text,colData=mylist$originalData$SequenceModifications)
-save(myobj,file="obj.rda")
-
-analyzable<-t(assays(myobj)$data[-c(1,14,15),])
-
-round(apply(analyzable,2, summary))
-```
-
-```{r}
-#Aplico logaritmos porque hay valores extremadamente altos
-opt <- par(mfrow=c(3,3))
-for (i in 1:ncol(analyzable))
-  hist(log(analyzable[,i]), main = targets$Sample...1[i],xlab=targets$Sample...1[i])
-par(opt)
-```
-
-```{r}
-groupColors <- c(rep(c("red","green"), 6))
-boxplot(log(analyzable), col=groupColors, main="log Expression values for\n 12 samples, two groups",
-    xlab="Slides",
-    ylab="logExpression", las=2, cex.axis=0.7, cex.main=0.7)
-```
-
-```{r}
-row_sub = apply(analyzable, 1, function(row) sum(row==0)<12)
-analyzable<-analyzable[row_sub,]
-pca<-prcomp(t(analyzable), scale=TRUE) # Ya se han escalado los datos
-loads<- round(pca$sdev^2/sum(pca$sdev^2)*100,1)
-xlab<-c(paste("PC1",loads[1],"%"))
-ylab<-c(paste("PC2",loads[2],"%"))
-plot(pca$x[,1:2],xlab=xlab,ylab=ylab, col=groupColors, 
-     main ="Principal components (PCA)")
-names2plot<-targets$Sample...1
-
-text(pca$x[,1],pca$x[,2],names2plot, pos=3, cex=.6)
-
-install.packages("factoextra")
-library(factoextra)
-
-fviz_eig(pca, addlabels = TRUE, ylim = c(0, 100))
-
+coldata<-data.frame(file$Muscle.loss,row.names = file$Patient.ID)
+myobj<-SummarizedExperiment(assays=list(data=matr),metadata=descr$text,colData=coldata)
 
 ```
 
-```{r}
-colnames(analyzable) <- names2plot
-clust.euclid.average <- hclust(dist(t(analyzable)),method="average")
-plot(clust.euclid.average, hang=-1)
-```
-
-
+Una vez visto que se tiene todo ordenado de la forma apropiada, se normalizan las variables para eliminar posibles bias.
+En las siguientes figuras se pueden ver los datos antes y después de la normalización
 ```{r}
 library("POMA")
 normalized <- PomaNorm(myobj, method = "log_pareto")
@@ -102,25 +66,51 @@ opt <- par(mfrow=c(1,2))
 PomaBoxplots(myobj, group = "samples", 
              jitter = FALSE,
              legend_position = "none") +
-  ggplot2::ggtitle("Not Normalized") # data before normalization
+  ggplot2::ggtitle("Sin normalizar") # data antes de normalizar
+
+```
+
+```{r plotnorm,echo=FALSE}
 
 PomaBoxplots(normalized, group = "samples", 
              jitter = FALSE,
              legend_position = "none") +
-  ggplot2::ggtitle("Normalized") # data after normalization
+  ggplot2::ggtitle("Normalizada") # data después de normalizar
+```
+
+Otro ajuste que podemos hacer es la eliminación de outliers. Los outliers son muestras que se alejan mucho del resto de elementos del mismo tipo y que, por tanto, sus valores pueden deberse a errores en la lectura o en el procisimiento de adquisición de los mismos. En nuestro caso se ha considerado su eliminación.
+```{r preproc, include=FALSE}
+pre_processed <- PomaOutliers(normalized, do = "clean")
+
+```
+
+Una vez pre-procesados los datos
+```{r analysis}
+
+poma_corr<-PomaCorr(pre_processed)
+poma_corr$correlations
+poma_corr$corrplot
 ```
 
 ```{r}
-pre_processed <- PomaOutliers(normalized, do = "clean")
+PomaUnivariate(pre_processed, method = "ttest")
+pomvolcano<-PomaVolcano(myobj, pval = "adjusted",labels=TRUE)
 
-
-poma_pca <- PomaMultivariate(pre_processed, method = "pca")
-
-heatmap(matr)
+BiocManager::install('EnhancedVolcano')
+library(EnhancedVolcano)
+filevolcano<-file[,-c(1,2)]
+EnhancedVolcano(filevolcano,x ='log2FoldChange',y ='pvalue')
 ```
 
-```{r analyisis}
+```{r}
+poma_pca <- PomaMultivariate(pre_processed, method = "pca")
+poma_pca$scoresplot +
+  ggplot2::ggtitle("Scores Plot")
+```
 
+```{r}
+poma_pca$screeplot +
+  ggplot2::ggtitle("Scree Plot")
 
 ```
 
